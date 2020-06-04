@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -126,15 +128,23 @@ func (util *S3SelectUtil) count(params *s3.SelectObjectContentInput) int {
 
 func (util *S3SelectUtil) Execute() {
 	util.init()
+	list := util.queryObjectList(bucket, prefix)
 
-	total := 0
-	for _, content := range util.queryObjectList(bucket, prefix).Contents {
-		param := util.buildSelectParams(bucket, *content.Key, querySQL)
-		count := util.count(param)
-		total += count
-		fmt.Printf("file: %s contains %d target\n", *content.Key, count)
+	var count int32
+	var wg sync.WaitGroup
+	wg.Add(len(list.Contents))
+	for _, content := range list.Contents {
+		go func(content *s3.Object, wg *sync.WaitGroup) {
+			defer wg.Done()
+			param := util.buildSelectParams(bucket, *content.Key, querySQL)
+			subCount := util.count(param)
+			atomic.AddInt32(&count, int32(subCount))
+			fmt.Printf("file: %s contains %d target\n", *content.Key, subCount)
+		}(content, &wg)
 	}
-	fmt.Println("total:", total)
+
+	wg.Wait()
+	fmt.Println("total:", count)
 }
 
 func main() {
