@@ -54,7 +54,7 @@ util.Count(bucket, prefix, querySQL)
 
 ### 场景三
 
-统计包含name为tony的文件
+删除包含name为tony的文件
 ```$xslt
 const (
 	token  = ""
